@@ -1,9 +1,0 @@
-[workspace]
-members = ["*"]
-
-[workspace.package]
-version = "0.0.0"
-edition = "2021"
-
-[workspace.dependencies]
-soroban-sdk = "21.0.0"

@@ -1,0 +1,15 @@
+[workspace]
+members = [".", "src/vesting"]
+resolver = "2"
+
+[package]
+name = "anchorpoint"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/vesting/lib.rs"
+
+[[test]]
+name = "vesting"
+path = "src/vesting/lib.rs"
