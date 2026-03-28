@@ -1,5 +1,5 @@
 [workspace]
-members = ["src/upgradeable"]
+members = ["src/upgradeable", "src/flash_loan"]
 resolver = "2"
 
 [profile.release]
