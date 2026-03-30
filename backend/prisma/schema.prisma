@@ -17,6 +17,7 @@ model User {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   transactions  Transaction[]
+  kycCustomer   KycCustomer?
 
   @@index([publicKey])
 }
@@ -33,6 +34,27 @@ model Transaction {
   stellarTxId   String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+enum KYCStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model KycCustomer {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id])
+  firstName   String?
+  lastName    String?
+  email       String?
+  status      KYCStatus @default(PENDING)
+  extraFields Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([userId])
 }
