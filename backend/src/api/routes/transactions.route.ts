@@ -79,7 +79,11 @@ const querySchema = z.object({
  *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, validate({ query: querySchema }), async (req: AuthRequest, res: Response) => {
-  const { page, limit, assetCode } = req.query as any;
+  const { page, limit, assetCode } = req.query as unknown as {
+    page: number;
+    limit: number;
+    assetCode?: string;
+  };
   const publicKey = req.user!.publicKey;
 
   try {
@@ -88,7 +92,9 @@ router.get('/', authMiddleware, validate({ query: querySchema }), async (req: Au
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
         where: {
-          userPublicKey: publicKey,
+          user: {
+            publicKey,
+          },
           ...(assetCode && { assetCode }),
         },
         orderBy: {
@@ -99,7 +105,9 @@ router.get('/', authMiddleware, validate({ query: querySchema }), async (req: Au
       }),
       prisma.transaction.count({
         where: {
-          userPublicKey: publicKey,
+          user: {
+            publicKey,
+          },
           ...(assetCode && { assetCode }),
         },
       }),

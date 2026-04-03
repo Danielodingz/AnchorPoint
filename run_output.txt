@@ -15,3 +15,15 @@ Resolving conflict in backend/src/api/routes/info.route.ts
 Resolving conflict in backend/src/api/routes/sep24.route.ts
 Resolving conflict in backend/src/api/routes/transactions.route.ts
 Resolving conflict in backend/src/index.ts
+Successfully resolved and merged PR #89
+Merging PR #84: feat: add support for nft metadata
+Merged PR #84 successfully without conflicts.
+Merging PR #83: feat: implement quadratic voting for governance
+Merged PR #83 successfully without conflicts.
+Merging PR #82: feat: add formal verification invariants
+Merged PR #82 successfully without conflicts.
+Merging PR #81: I implemented the webhhook notification for transaction status
+Conflict merging PR #81, resolving by accepting both...
+Resolving conflict in backend/src/api/controllers/info.controller.ts
+Resolving conflict in backend/src/api/routes/sep24.route.ts
+Resolving conflict in backend/src/index.ts
