@@ -10,6 +10,7 @@ import sep6Router from './api/routes/sep6.route';
 import sep38Router from './api/routes/sep38.route';
 import infoRouter from './api/routes/info.route';
 import metricsRouter from './api/routes/metrics.route';
+import usersRouter from './api/routes/users.route';
 import { errorHandler } from './api/middleware/error.middleware';
 import { metricsMiddleware, connectionTracker } from './api/middleware/metrics.middleware';
 
@@ -98,6 +99,7 @@ app.use(connectionTracker);
 app.use(metricsMiddleware);
 
 app.use('/api/transactions', transactionsRouter);
+app.use('/api/users', usersRouter);
 
 // Prometheus metrics endpoint
 app.use('/metrics', metricsRouter);
@@ -108,11 +110,20 @@ app.use('/sep38', sep38Router);
 // SEP-1 Info endpoint
 app.use('/info', infoRouter);
 
+import authRouter from './api/routes/auth.route';
+
 // SEP-24 routes
 app.use('/sep24', sep24Router);
 
 // SEP-6 routes
 app.use('/sep6', sep6Router);
+
+// Auth routes (SEP-10)
+app.use('/auth', authRouter);
+
+// SEP-12 KYC routes
+import sep12Router from './api/routes/sep12.route';
+app.use('/sep12', sep12Router);
 
 // Global error handling middleware (must be last)
 app.use(errorHandler);
