@@ -16,6 +16,12 @@ import {
   metricsMiddleware,
   connectionTracker,
 } from "./api/middleware/metrics.middleware";
+import { authLimiter } from "./api/middleware/rate-limit.middleware";
+import { dynamicRateLimiter } from "./api/middleware/dynamic-rate-limit.middleware";
+import { TierConfigService } from "./services/tier-config.service";
+import { ApiKeyService } from "./services/api-key.service";
+import { redis } from "./lib/redis";
+import { createApiKeysRouter } from "./api/routes/api-keys.route";
 
 const app = express();
 const PORT = config.PORT;
@@ -104,6 +110,18 @@ app.get("/api-docs.json", (req: Request, res: Response) => {
 // Apply metrics tracking middleware
 app.use(connectionTracker);
 app.use(metricsMiddleware);
+
+// Dynamic rate limiting setup
+const tierConfig = new TierConfigService();
+const apiKeyService = new ApiKeyService();
+
+// Apply authLimiter (IP-based) then dynamicRateLimiter (API-key-based) to all routes
+// /health, /metrics, /api-docs are bypassed inside dynamicRateLimiter
+app.use(authLimiter);
+app.use(dynamicRateLimiter(apiKeyService, tierConfig, redis));
+
+// API Key management routes
+app.use("/api/keys", createApiKeysRouter(apiKeyService));
 
 app.use("/api/transactions", transactionsRouter);
 
