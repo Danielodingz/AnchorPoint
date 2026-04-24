@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Env,
+    contract, contractimpl, contracttype, symbol_short, token, Address, Env, IntoVal,
 };
 
 #[contracttype]
@@ -11,6 +11,8 @@ pub enum DataKey {
     TokenB,
     ReserveA,
     ReserveB,
+    Admin,
+    Registry,
 }
 
 #[contract]
@@ -19,19 +21,27 @@ pub struct MultiAssetSwap;
 #[contractimpl]
 impl MultiAssetSwap {
     /// Initializes the swap pool.
-    pub fn initialize(env: Env, token_a: Address, token_b: Address) {
+    pub fn initialize(env: Env, admin: Address, token_a: Address, token_b: Address) {
         if env.storage().instance().has(&DataKey::TokenA) {
             panic!("already initialized");
         }
         
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::TokenA, &token_a);
         env.storage().instance().set(&DataKey::TokenB, &token_b);
         env.storage().instance().set(&DataKey::ReserveA, &0_i128);
         env.storage().instance().set(&DataKey::ReserveB, &0_i128);
     }
 
+    pub fn set_registry(env: Env, registry: Address) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+    }
+
     /// Deposits liquidity into the pool.
     pub fn deposit(env: Env, from: Address, amount_a: i128, amount_b: i128) {
+        Self::ensure_not_paused(&env);
         from.require_auth();
         assert!(amount_a > 0 && amount_b > 0, "amount must be positive");
 
@@ -61,6 +71,7 @@ impl MultiAssetSwap {
         amount_in: i128,
         min_amount_out: i128,
     ) -> i128 {
+        Self::ensure_not_paused(&env);
         from.require_auth();
         assert!(amount_in > 0, "amount must be positive");
 
@@ -120,6 +131,15 @@ impl MultiAssetSwap {
         env.events().publish((symbol_short!("swap"), from), (amount_in, amount_out));
 
         amount_out
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

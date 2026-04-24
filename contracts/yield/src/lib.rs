@@ -14,7 +14,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Env,
+    contract, contractimpl, contracttype, symbol_short, token, Address, Env, IntoVal,
 };
 
 // Fixed-point precision: 1e18
@@ -40,6 +40,7 @@ pub enum DataKey {
     UserRewardPerTokenPaid(Address),
     /// Accrued but unclaimed rewards for a user
     Rewards(Address),
+    Registry,
 }
 
 // ── Contract ─────────────────────────────────────────────────────────────────
@@ -64,11 +65,18 @@ impl YieldDistribution {
         env.storage().instance().set(&DataKey::RewardPerTokenStored, &0_i128);
     }
 
+    pub fn set_registry(env: Env, registry: Address) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+    }
+
     /// Deposit `amount` of reward tokens into the contract for distribution.
     /// Calling this increases `reward_per_token_stored` proportionally.
     ///
     /// O(1) — no iteration over holders.
     pub fn deposit_rewards(env: Env, from: Address, amount: i128) {
+        Self::ensure_not_paused(&env);
         from.require_auth();
         assert!(amount > 0, "amount must be positive");
 
@@ -112,6 +120,7 @@ impl YieldDistribution {
 
     /// Stake `amount` of the staking token.
     pub fn stake(env: Env, user: Address, amount: i128) {
+        Self::ensure_not_paused(&env);
         user.require_auth();
         assert!(amount > 0, "amount must be positive");
 
@@ -144,6 +153,7 @@ impl YieldDistribution {
 
     /// Unstake `amount` of the staking token.
     pub fn unstake(env: Env, user: Address, amount: i128) {
+        Self::ensure_not_paused(&env);
         user.require_auth();
         assert!(amount > 0, "amount must be positive");
 
@@ -179,6 +189,7 @@ impl YieldDistribution {
 
     /// Claim all accrued rewards for `user`.
     pub fn claim(env: Env, user: Address) -> i128 {
+        Self::ensure_not_paused(&env);
         user.require_auth();
         Self::_update_reward(&env, &user);
 
@@ -286,6 +297,15 @@ impl YieldDistribution {
             .persistent()
             .get(&DataKey::Stake(user.clone()))
             .unwrap_or(0)
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

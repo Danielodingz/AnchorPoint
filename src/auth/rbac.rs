@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env,
+    contract, contractimpl, contracttype, symbol_short, Address, Env, IntoVal,
 };
 
 /// Defined roles for the RBAC module.
@@ -21,6 +21,7 @@ pub enum AccessRole {
 pub enum AccessDataKey {
     Role(Address),
     AdminInitialized,
+    Registry,
 }
 
 /// A collection of utility functions to manage RBAC.
@@ -106,13 +107,23 @@ impl RBACContract {
         RBAC::init_admin(&env, &admin);
     }
 
+    pub fn set_registry(env: Env, from: Address, registry: Address) {
+        from.require_auth();
+        if !RBAC::has_role(&env, &from, AccessRole::Admin) {
+            panic!("unauthorized");
+        }
+        env.storage().instance().set(&AccessDataKey::Registry, &registry);
+    }
+
     /// Assigns a role to a target address. Only the admin can call this.
     pub fn set_role(env: Env, from: Address, target: Address, role: AccessRole) {
+        Self::ensure_not_paused(&env);
         RBAC::set_role(&env, &from, &target, role);
     }
 
     /// Revokes any role from a target address. Only the admin can call this.
     pub fn revoke_role(env: Env, from: Address, target: Address) {
+        Self::ensure_not_paused(&env);
         RBAC::revoke_role(&env, &from, &target);
     }
 
@@ -124,6 +135,15 @@ impl RBACContract {
     /// Returns the raw role of an address, if any.
     pub fn get_role(env: Env, address: Address) -> Option<AccessRole> {
         env.storage().instance().get(&AccessDataKey::Role(address))
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&AccessDataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

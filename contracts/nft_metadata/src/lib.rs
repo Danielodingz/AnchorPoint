@@ -12,7 +12,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String, Vec, Map};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, IntoVal, String, Vec, Map};
 
 // ============================================================================
 // Storage Keys
@@ -35,6 +35,7 @@ pub enum DataKey {
     TokenApproval(u64, Address),
     /// Whether an operator is approved for all tokens of an owner
     OperatorApproval(Address, Address),
+    Registry,
 }
 
 // ============================================================================
@@ -176,6 +177,12 @@ impl NftMetadataContract {
         env.storage().instance().set(&DataKey::TokenCounter, &0u64);
     }
 
+    pub fn set_registry(env: Env, registry: Address) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+    }
+
     // ========================================================================
     // NFT Minting
     // ========================================================================
@@ -207,6 +214,7 @@ impl NftMetadataContract {
         royalty_percentage: u32,
         is_mutable: bool,
     ) -> u64 {
+        Self::ensure_not_paused(&env);
         minter.require_auth();
 
         let admin: Address = env
@@ -269,6 +277,7 @@ impl NftMetadataContract {
         to: Address,
         metadata: NftMetadata,
     ) -> u64 {
+        Self::ensure_not_paused(&env);
         minter.require_auth();
 
         let admin: Address = env
@@ -345,6 +354,7 @@ impl NftMetadataContract {
         description: String,
         image: String,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let owner: Address = env
@@ -395,6 +405,7 @@ impl NftMetadataContract {
         token_id: u64,
         attribute: NftAttribute,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let owner: Address = env
@@ -438,6 +449,7 @@ impl NftMetadataContract {
         percentage: u32,
         recipient: Address,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let owner: Address = env
@@ -493,6 +505,7 @@ impl NftMetadataContract {
         to: Address,
         token_id: u64,
     ) {
+        Self::ensure_not_paused(&env);
         from.require_auth();
 
         let owner: Address = env
@@ -531,6 +544,7 @@ impl NftMetadataContract {
         approved: Address,
         token_id: u64,
     ) {
+        Self::ensure_not_paused(&env);
         owner.require_auth();
 
         let token_owner: Address = env
@@ -562,6 +576,7 @@ impl NftMetadataContract {
         operator: Address,
         approved: bool,
     ) {
+        Self::ensure_not_paused(&env);
         owner.require_auth();
 
         if approved {
@@ -643,6 +658,7 @@ impl NftMetadataContract {
         description: String,
         image: String,
     ) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
 
         let admin: Address = env
@@ -712,6 +728,15 @@ impl NftMetadataContract {
         let royalty_amount = (sale_price * metadata.royalty_percentage as i128) / 10000;
 
         (metadata.royalty_recipient, royalty_amount)
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

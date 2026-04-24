@@ -7,12 +7,14 @@ use soroban_sdk::{
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    Admin,
     TokenA,
     TokenB,
     ReserveA,
     ReserveB,
     TotalShares,
     Shares(Address),
+    Registry,
 }
 
 #[contract]
@@ -21,10 +23,11 @@ pub struct AMM;
 #[contractimpl]
 impl AMM {
     /// Initializes the AMM pool for a specific pair of tokens.
-    pub fn initialize(env: Env, token_a: Address, token_b: Address) {
+    pub fn initialize(env: Env, admin: Address, token_a: Address, token_b: Address) {
         if env.storage().instance().has(&DataKey::TokenA) {
             panic!("already initialized");
         }
+        env.storage().instance().set(&DataKey::Admin, &admin);
         
         // Canonical order: ensures same pool for (A,B) and (B,A)
         if token_a < token_b {
@@ -40,8 +43,15 @@ impl AMM {
         env.storage().instance().set(&DataKey::TotalShares, &0_i128);
     }
 
+    pub fn set_registry(env: Env, registry: Address) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+    }
+
     /// Deposits liquidity into the pool. Returns the number of LP shares minted.
     pub fn deposit(env: Env, from: Address, amount_a: i128, amount_b: i128) -> i128 {
+        Self::ensure_not_paused(&env);
         from.require_auth();
 
         let token_a: Address = env.storage().instance().get(&DataKey::TokenA).expect("not initialized");
@@ -83,6 +93,7 @@ impl AMM {
 
     /// Swaps tokens using the constant product formula (x * y = k) with a 0.3% fee.
     pub fn swap(env: Env, from: Address, token_in: Address, amount_in: i128, min_amount_out: i128) -> i128 {
+        Self::ensure_not_paused(&env);
         from.require_auth();
 
         let token_a: Address = env.storage().instance().get(&DataKey::TokenA).expect("not initialized");
@@ -132,6 +143,7 @@ impl AMM {
 
     /// Withdraws liquidity from the pool.
     pub fn withdraw(env: Env, from: Address, shares: i128) -> (i128, i128) {
+        Self::ensure_not_paused(&env);
         from.require_auth();
 
         let token_a: Address = env.storage().instance().get(&DataKey::TokenA).expect("not initialized");
@@ -167,6 +179,15 @@ impl AMM {
             env.storage().instance().get(&DataKey::ReserveA).unwrap_or(0),
             env.storage().instance().get(&DataKey::ReserveB).unwrap_or(0),
         )
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

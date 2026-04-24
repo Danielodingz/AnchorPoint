@@ -1,4 +1,4 @@
-﻿#![no_std]
+#![no_std]
 //! Governance Contract with Enhanced Quadratic Voting
 //!
 //! This contract implements a sophisticated quadratic voting mechanism where:
@@ -7,7 +7,7 @@
 //! - Proposals require quorum to pass
 //! - Mathematical accuracy is ensured through careful integer operations
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, IntoVal, String};
 
 /// Default voting credits allocated to each user
 const DEFAULT_VOTING_CREDITS: i128 = 10_000;
@@ -38,6 +38,7 @@ pub enum DataKey {
     ProposalQuadraticCost(u32),
     /// User's quadratic cost spent on a proposal
     UserQuadraticCost(u32, Address),
+    Registry,
 }
 
 /// Proposal lifecycle states
@@ -121,6 +122,12 @@ impl GovernanceContract {
         env.storage().instance().set(&DataKey::QuorumPercentage, &DEFAULT_QUORUM_PERCENTAGE);
     }
 
+    pub fn set_registry(env: Env, registry: Address) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+    }
+
     /// Allocate voting credits to a user
     ///
     /// Voting credits determine how much quadratic voting power a user has.
@@ -135,6 +142,7 @@ impl GovernanceContract {
     /// # Panics
     /// Panics if caller is not admin
     pub fn allocate_credits(env: Env, caller: Address, user: Address, credits: i128) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
         
         let admin: Address = env
@@ -193,6 +201,7 @@ impl GovernanceContract {
     /// # Panics
     /// Panics if caller is not admin or percentage is invalid
     pub fn set_quorum_percentage(env: Env, caller: Address, percentage: i128) {
+        Self::ensure_not_paused(&env);
         caller.require_auth();
         
         let admin: Address = env
@@ -233,6 +242,7 @@ impl GovernanceContract {
         description: String,
         voting_period: u64,
     ) -> u32 {
+        Self::ensure_not_paused(&env);
         creator.require_auth();
         assert!(voting_period > 0, "voting period must be positive");
 
@@ -314,6 +324,7 @@ impl GovernanceContract {
         support: bool,
         votes: i128,
     ) {
+        Self::ensure_not_paused(&env);
         voter.require_auth();
         assert!(votes > 0, "votes must be positive");
 
@@ -510,6 +521,7 @@ impl GovernanceContract {
     /// - proposal did not pass the vote
     /// - quorum was not reached
     pub fn execute_proposal(env: Env, executor: Address, proposal_id: u32) {
+        Self::ensure_not_paused(&env);
         executor.require_auth();
 
         let admin: Address = env
@@ -735,6 +747,15 @@ impl GovernanceContract {
             .expect("proposal not found");
         
         proposal.voter_count
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

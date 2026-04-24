@@ -18,6 +18,7 @@ pub enum DataKey {
     OracleAddress,
     PriceRecord(Address),
     Admin,
+    Registry,
 }
 
 #[contract]
@@ -35,9 +36,16 @@ impl OracleConsumer {
         env.storage().instance().set(&DataKey::OracleAddress, &oracle);
     }
 
+    pub fn set_registry(env: Env, registry: Address) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+    }
+
     /// Pulls the latest price for a given asset from the configured external oracle.
     /// This updates the local storage with fresh data and returns it.
     pub fn update_price(env: Env, asset: Address) -> PriceData {
+        Self::ensure_not_paused(&env);
         let oracle: Address = env.storage().instance().get(&DataKey::OracleAddress).expect("oracle not set");
         
         // Attempt to call the external oracle's 'get_price' method.
@@ -74,6 +82,7 @@ impl OracleConsumer {
 
     /// Reconfigures the oracle source address. Restricted to the administrator.
     pub fn set_oracle(env: Env, new_oracle: Address) {
+        Self::ensure_not_paused(&env);
         let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("admin not configured");
         admin.require_auth();
         
@@ -83,6 +92,15 @@ impl OracleConsumer {
     /// Simple getter for the current oracle address.
     pub fn get_oracle(env: Env) -> Address {
         env.storage().instance().get(&DataKey::OracleAddress).unwrap()
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 

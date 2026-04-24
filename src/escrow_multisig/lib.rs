@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Vec, token};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, IntoVal, Vec, token};
 
 #[contracttype]
 #[derive(Clone)]
@@ -8,6 +8,7 @@ enum DataKey {
     Threshold,
     Recipient,
     Initialized,
+    Registry,
 }
 
 #[contract]
@@ -29,35 +30,20 @@ impl EscrowMultisig {
         e.storage().instance().set(&DataKey::Recipient, &recipient);
         e.storage().instance().set(&DataKey::Initialized, &true);
     }
+
+    pub fn set_registry(e: Env, signers: Vec<Address>, registry: Address) {
+        Self::verify_multisig(&e, &signers);
+        e.storage().instance().set(&DataKey::Registry, &registry);
+    }
     
     /// Release funds to the recipient.
     /// Requires authorization from M-of-N signers.
     /// The `signers` parameter specifies which M signers are authorizing the release.
     pub fn release(e: Env, signers: Vec<Address>, token: Address) {
-        let stored_signers: Vec<Address> = e.storage().instance().get(&DataKey::Signers).expect("not initialized");
-        let threshold: u32 = e.storage().instance().get(&DataKey::Threshold).expect("not initialized");
+        Self::ensure_not_paused(&e);
+        Self::verify_multisig(&e, &signers);
+        
         let recipient: Address = e.storage().instance().get(&DataKey::Recipient).expect("not initialized");
-        
-        if signers.len() < threshold {
-            panic!("not enough signers provided");
-        }
-        
-        // Verify all provided signers are valid and have authorized the call
-        for signer in signers.iter() {
-            let mut is_valid = false;
-            for stored_signer in stored_signers.iter() {
-                if signer == stored_signer {
-                    is_valid = true;
-                    break;
-                }
-            }
-            if !is_valid {
-                panic!("invalid signer provided");
-            }
-            
-            // This will fail the entire transaction if the signer hasn't authorized this call.
-            signer.require_auth();
-        }
         
         // Get the current balance of the contract for the specified token.
         let token_client = token::Client::new(&e, &token);
@@ -81,6 +67,38 @@ impl EscrowMultisig {
     /// Get the recipient.
     pub fn get_recipient(e: Env) -> Address {
         e.storage().instance().get(&DataKey::Recipient).expect("recipient not set")
+    }
+
+    fn verify_multisig(e: &Env, signers: &Vec<Address>) {
+        let stored_signers: Vec<Address> = e.storage().instance().get(&DataKey::Signers).expect("not initialized");
+        let threshold: u32 = e.storage().instance().get(&DataKey::Threshold).expect("not initialized");
+        
+        if signers.len() < threshold {
+            panic!("not enough signers provided");
+        }
+        
+        for signer in signers.iter() {
+            let mut is_valid = false;
+            for stored_signer in stored_signers.iter() {
+                if signer == stored_signer {
+                    is_valid = true;
+                    break;
+                }
+            }
+            if !is_valid {
+                panic!("invalid signer provided");
+            }
+            signer.require_auth();
+        }
+    }
+
+    fn ensure_not_paused(env: &Env) {
+        if let Some(registry_addr) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
+            let is_paused: bool = env.invoke_contract(&registry_addr, &soroban_sdk::symbol_short!("is_paused"), ().into_val(env));
+            if is_paused {
+                panic!("system is paused");
+            }
+        }
     }
 }
 
