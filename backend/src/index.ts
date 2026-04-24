@@ -10,6 +10,8 @@ import sep6Router from './api/routes/sep6.route';
 import sep38Router from './api/routes/sep38.route';
 import infoRouter from './api/routes/info.route';
 import metricsRouter from './api/routes/metrics.route';
+import eventRouter from './api/routes/event.route';
+import { eventIndexer } from './services/event-indexer.service';
 import { errorHandler } from './api/middleware/error.middleware';
 import { metricsMiddleware, connectionTracker } from './api/middleware/metrics.middleware';
 
@@ -114,6 +116,9 @@ app.use('/sep24', sep24Router);
 // SEP-6 routes
 app.use('/sep6', sep6Router);
 
+// Contract Events API
+app.use('/api/events', eventRouter);
+
 // Global error handling middleware (must be last)
 app.use(errorHandler);
 
@@ -122,6 +127,11 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`Backend service listening at http://localhost:${PORT}`);
     logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
+    
+    // Start the Soroban event indexer
+    eventIndexer.start().catch(err => {
+        logger.error('Failed to start Event Indexer:', err);
+    });
   });
 }
 

@@ -58,3 +58,20 @@ model KycCustomer {
 
   @@index([userId])
 }
+
+model ContractEvent {
+  id              String   @id @default(uuid())
+  contractId      String
+  ledger          Int
+  ledgerClosedAt  DateTime
+  txHash          String
+  contractEventId String   @unique // The unique ID from Soroban RPC
+  topics          String   // JSON stringified topics
+  value           String   // JSON stringified value
+  type            String   // e.g., "contract"
+  createdAt       DateTime @default(now())
+
+  @@index([contractId])
+  @@index([txHash])
+  @@index([ledger])
+}
