@@ -10,6 +10,8 @@ import sep6Router from './api/routes/sep6.route';
 import sep38Router from './api/routes/sep38.route';
 import infoRouter from './api/routes/info.route';
 import metricsRouter from './api/routes/metrics.route';
+import eventsRouter from './api/routes/events.route';
+import { eventIndexer } from './services/event-indexer.service';
 import { errorHandler } from './api/middleware/error.middleware';
 import { metricsMiddleware, connectionTracker } from './api/middleware/metrics.middleware';
 
@@ -98,6 +100,7 @@ app.use(connectionTracker);
 app.use(metricsMiddleware);
 
 app.use('/api/transactions', transactionsRouter);
+app.use('/api/events', eventsRouter);
 
 // Prometheus metrics endpoint
 app.use('/metrics', metricsRouter);
@@ -122,6 +125,11 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`Backend service listening at http://localhost:${PORT}`);
     logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
+    
+    // Start the event indexer
+    eventIndexer.start().catch(err => {
+      logger.error('Failed to start event indexer:', err);
+    });
   });
 }
 

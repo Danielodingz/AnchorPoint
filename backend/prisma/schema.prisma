@@ -58,3 +58,18 @@ model KycCustomer {
 
   @@index([userId])
 }
+
+model ContractEvent {
+  id              String   @id @default(uuid())
+  contractId      String
+  ledger          Int
+  ledgerClosedAt  String   // Storing as ISO string from RPC
+  txHash          String
+  eventType       String   // e.g., "swap", "deposit"
+  data            Json     // Parsed XDR data
+  createdAt       DateTime @default(now())
+
+  @@index([contractId])
+  @@index([eventType])
+  @@index([txHash])
+}
