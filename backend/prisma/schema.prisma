@@ -23,17 +23,26 @@ model User {
 }
 
 model Transaction {
-  id            String    @id @default(uuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  assetCode     String
-  amount        String
-  type          String    // DEPOSIT or WITHDRAW
-  status        String    // PENDING, COMPLETED, FAILED
-  externalId    String?   @unique
-  stellarTxId   String?   @unique
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id])
+  assetCode           String
+  amount              String
+  type                String    // DEPOSIT | WITHDRAW | SEP31
+  status              String    // PENDING, COMPLETED, FAILED
+  externalId          String?   @unique
+  stellarTxId         String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // SEP-31 specific fields (nullable for backward compatibility)
+  senderInfo          Json?
+  receiverInfo        Json?
+  callbackUrl         String?
+  sep31Status         String?
+  requiredInfoMessage String?
+  completedAt         DateTime?
+  refunded            Boolean   @default(false)
 
   @@index([userId])
 }
