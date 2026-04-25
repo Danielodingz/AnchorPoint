@@ -18,8 +18,21 @@ model User {
   updatedAt     DateTime      @updatedAt
   transactions  Transaction[]
   kycCustomer   KycCustomer?
+  apiKeys       ApiKey[]
 
   @@index([publicKey])
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tier      String   @default("FREE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
 }
 
 model Transaction {

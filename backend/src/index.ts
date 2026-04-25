@@ -13,6 +13,8 @@ import metricsRouter from './api/routes/metrics.route';
 import queueRouter from './api/routes/queue.route';
 import { errorHandler } from './api/middleware/error.middleware';
 import { metricsMiddleware, connectionTracker } from './api/middleware/metrics.middleware';
+import { apiKeyMiddleware } from './api/middleware/api-key.middleware';
+import { burstRateLimiter, sustainedRateLimiter } from './api/middleware/rate-limit.middleware';
 
 const app = express();
 const PORT = config.PORT;
@@ -97,6 +99,11 @@ app.get('/api-docs.json', (req: Request, res: Response) => {
 // Apply metrics tracking middleware
 app.use(connectionTracker);
 app.use(metricsMiddleware);
+
+// Apply API Key Validation and dynamic rate limiting globally
+app.use(apiKeyMiddleware);
+app.use(burstRateLimiter);
+app.use(sustainedRateLimiter);
 
 app.use('/api/transactions', transactionsRouter);
 
