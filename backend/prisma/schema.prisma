@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -81,6 +81,7 @@ model KycCustomer {
   @@index([userId])
 }
 
+<<<<<<< HEAD
 enum JobStatus {
   PENDING
   ACTIVE
@@ -124,4 +125,15 @@ model ContractJob {
   @@index([priority])
   @@index([createdBy])
   @@index([createdAt])
+=======
+model SystemConfig {
+  id          String   @id @default(uuid())
+  version     Int      @unique
+  settings    String
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+>>>>>>> pr-190
 }

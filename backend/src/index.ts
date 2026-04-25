@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import "./tracing";
 import express, { Request, Response } from "express";
 import cors from "cors";
@@ -18,6 +19,26 @@ import {
 } from "./api/middleware/metrics.middleware";
 import { tracingMiddleware } from "./tracing/tracing.middleware";
 import { requestLogMiddleware } from "./api/middleware/request-log.middleware";
+=======
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import { config } from './config/env';
+import { swaggerSpec } from './config/swagger';
+import logger from './utils/logger';
+import transactionsRouter from './api/routes/transactions.route';
+import sep24Router from './api/routes/sep24.route';
+import sep6Router from './api/routes/sep6.route';
+import sep38Router from './api/routes/sep38.route';
+import infoRouter from './api/routes/info.route';
+import metricsRouter from './api/routes/metrics.route';
+import configRouter from './api/routes/config.route';
+import { errorHandler } from './api/middleware/error.middleware';
+import { metricsMiddleware, connectionTracker } from './api/middleware/metrics.middleware';
+import { apiKeyMiddleware } from './api/middleware/api-key.middleware';
+import { burstRateLimiter, sustainedRateLimiter } from './api/middleware/rate-limit.middleware';
+import configService from './services/config.service';
+>>>>>>> pr-190
 
 const app = express();
 const PORT = config.PORT;
@@ -25,6 +46,9 @@ const PORT = config.PORT;
 app.use(tracingMiddleware);
 app.use(cors());
 app.use(express.json());
+
+// Initialize the configuration service
+configService.initialize().catch(err => logger.error('Failed to initialize config service:', err));
 
 /**
  * @swagger
@@ -110,6 +134,9 @@ app.use(metricsMiddleware);
 app.use(requestLogMiddleware);
 
 app.use("/api/transactions", transactionsRouter);
+
+// Configuration management API
+app.use('/api/config', configRouter);
 
 // Prometheus metrics endpoint
 app.use("/metrics", metricsRouter);
