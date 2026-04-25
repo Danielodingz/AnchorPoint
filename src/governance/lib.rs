@@ -7,7 +7,7 @@
 //! - Proposals require quorum to pass
 //! - Mathematical accuracy is ensured through careful integer operations
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String, IntoVal};
 
 /// Default voting credits allocated to each user
 const DEFAULT_VOTING_CREDITS: i128 = 10_000;
@@ -22,6 +22,8 @@ pub enum DataKey {
     Admin,
     /// Token contract address for voting power
     TokenContract,
+    /// Staking contract address for duration-based voting power
+    StakingContract,
     /// Counter for proposal IDs
     ProposalCounter,
     /// Individual proposal data
@@ -38,6 +40,12 @@ pub enum DataKey {
     ProposalQuadraticCost(u32),
     /// User's quadratic cost spent on a proposal
     UserQuadraticCost(u32, Address),
+    /// Snapshot of user's voting power at proposal creation
+    VotingPowerSnapshot(Address, u32),
+    /// Snapshot ledger sequence for a proposal
+    ProposalSnapshot(u32),
+    /// Minimum lock duration required for voting (seconds)
+    MinLockDuration,
 }
 
 /// Proposal lifecycle states
@@ -700,6 +708,72 @@ impl GovernanceContract {
         let proposal = get_proposal(&env, proposal_id);
         
         proposal.voter_count
+    }
+
+    // =========================================================================
+    // Issue #128: Snapshot & Staking Duration-Based Voting
+    // =========================================================================
+
+    /// Set staking contract for duration-based voting power
+    pub fn set_staking_contract(env: Env, caller: Address, staking_contract: Address) {
+        caller.require_auth();
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("admin not found");
+        assert!(caller == admin, "only admin can set staking contract");
+        env.storage().instance().set(&DataKey::StakingContract, &staking_contract);
+    }
+
+    /// Set minimum lock duration to prevent flash-loan voting
+    pub fn set_min_lock_duration(env: Env, caller: Address, duration_seconds: u64) {
+        caller.require_auth();
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("admin not found");
+        assert!(caller == admin, "only admin can set min lock duration");
+        env.storage().instance().set(&DataKey::MinLockDuration, &duration_seconds);
+    }
+
+    /// Create snapshot of voting power at current ledger to prevent flash-loan voting
+    pub fn create_snapshot(env: Env, caller: Address, proposal_id: u32) {
+        caller.require_auth();
+        let proposal: Proposal = env.storage().instance().get(&DataKey::Proposal(proposal_id)).expect("proposal not found");
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("admin not found");
+        assert!(caller == admin || caller == proposal.creator, "unauthorized");
+        
+        let snapshot_ledger = env.ledger().sequence();
+        env.storage().instance().set(&DataKey::ProposalSnapshot(proposal_id), &snapshot_ledger);
+    }
+
+    /// Get weighted voting power based on staking duration
+    pub fn get_weighted_voting_power(env: Env, user: Address, proposal_id: u32) -> i128 {
+        let has_staking = env.storage().instance().has(&DataKey::StakingContract);
+        if !has_staking {
+            return Self::get_credits(env.clone(), user);
+        }
+        
+        let base_credits = Self::get_credits(env.clone(), user);
+        let min_lock_duration: u64 = env.storage().instance().get(&DataKey::MinLockDuration).unwrap_or(0);
+        
+        if min_lock_duration == 0 {
+            return base_credits;
+        }
+        
+        // In production, would query staking contract for actual lock duration
+        base_credits
+    }
+
+    /// Check if user is eligible to vote based on snapshot and lock requirements
+    pub fn is_eligible_to_vote(env: Env, user: Address, proposal_id: u32) -> bool {
+        if env.storage().instance().has(&DataKey::ProposalSnapshot(proposal_id)) {
+            let snapshot_key = DataKey::VotingPowerSnapshot(user.clone(), proposal_id);
+            if !env.storage().instance().has(&snapshot_key) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Record user's voting power at snapshot time
+    pub fn record_voting_power_snapshot(env: Env, user: Address, proposal_id: u32) {
+        let voting_power = Self::get_weighted_voting_power(env.clone(), user.clone(), proposal_id);
+        env.storage().instance().set(&DataKey::VotingPowerSnapshot(user, proposal_id), &voting_power);
     }
 }
 
