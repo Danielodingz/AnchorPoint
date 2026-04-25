@@ -97,6 +97,25 @@ pub struct VoteRecord {
 #[contract]
 pub struct GovernanceContract;
 
+// ── Private storage helpers ──────────────────────────────────────────────────
+
+fn get_admin(env: &Env) -> Address {
+    env.storage().instance().get(&DataKey::Admin).expect("admin not found")
+}
+
+fn get_proposal(env: &Env, id: u32) -> Proposal {
+    env.storage().instance().get(&DataKey::Proposal(id)).expect("proposal not found")
+}
+
+fn get_user_credits(env: &Env, user: &Address) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::VotingCredits(user.clone()))
+        .unwrap_or(DEFAULT_VOTING_CREDITS)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 #[contractimpl]
 impl GovernanceContract {
     /// Initialize the governance contract
@@ -137,20 +156,12 @@ impl GovernanceContract {
     pub fn allocate_credits(env: Env, caller: Address, user: Address, credits: i128) {
         caller.require_auth();
         
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .expect("admin not found");
+        let admin = get_admin(&env);
         
         assert!(caller == admin, "only admin can allocate credits");
         assert!(credits >= 0, "credits must be non-negative");
 
-        let current_credits: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::VotingCredits(user.clone()))
-            .unwrap_or(0);
+        let current_credits = get_user_credits(&env, &user);
         
         let total_issued: i128 = env
             .storage()
@@ -177,10 +188,7 @@ impl GovernanceContract {
     /// # Returns
     /// The user's remaining voting credits
     pub fn get_credits(env: Env, user: Address) -> i128 {
-        env.storage()
-            .instance()
-            .get(&DataKey::VotingCredits(user))
-            .unwrap_or(DEFAULT_VOTING_CREDITS)
+        get_user_credits(&env, &user)
     }
 
     /// Set the quorum percentage
@@ -195,11 +203,7 @@ impl GovernanceContract {
     pub fn set_quorum_percentage(env: Env, caller: Address, percentage: i128) {
         caller.require_auth();
         
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .expect("admin not found");
+        let admin = get_admin(&env);
         
         assert!(caller == admin, "only admin can set quorum");
         assert!(percentage >= 0 && percentage <= 100, "invalid quorum percentage");
@@ -317,11 +321,7 @@ impl GovernanceContract {
         voter.require_auth();
         assert!(votes > 0, "votes must be positive");
 
-        let mut proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let mut proposal = get_proposal(&env, proposal_id);
 
         let current_time = env.ledger().timestamp();
         assert!(
@@ -348,11 +348,7 @@ impl GovernanceContract {
             .expect("quadratic vote cost overflowed");
 
         // Check user has sufficient credits
-        let user_credits: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::VotingCredits(voter.clone()))
-            .unwrap_or(DEFAULT_VOTING_CREDITS);
+        let user_credits = get_user_credits(&env, &voter);
         
         assert!(user_credits >= quadratic_cost, "insufficient voting credits");
 
@@ -411,10 +407,7 @@ impl GovernanceContract {
     /// # Panics
     /// Panics if proposal is not found
     pub fn get_proposal(env: Env, proposal_id: u32) -> Proposal {
-        env.storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found")
+        get_proposal(&env, proposal_id)
     }
 
     /// Check if a proposal has passed (more votes for than against, quorum met)
@@ -437,11 +430,7 @@ impl GovernanceContract {
     /// - voting period has not ended
     /// - proposal has already been executed
     pub fn has_passed(env: Env, proposal_id: u32) -> bool {
-        let mut proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let mut proposal = get_proposal(&env, proposal_id);
 
         let current_time = env.ledger().timestamp();
 
@@ -481,11 +470,7 @@ impl GovernanceContract {
     /// # Returns
     /// True if quorum was reached
     pub fn quorum_reached(env: Env, proposal_id: u32) -> bool {
-        let proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let proposal = get_proposal(&env, proposal_id);
 
         let total_votes = proposal.votes_for + proposal.votes_against;
         total_votes >= proposal.quorum
@@ -512,17 +497,9 @@ impl GovernanceContract {
     pub fn execute_proposal(env: Env, executor: Address, proposal_id: u32) {
         executor.require_auth();
 
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .expect("admin not found");
+        let admin = get_admin(&env);
 
-        let mut proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let mut proposal = get_proposal(&env, proposal_id);
 
         assert!(
             executor == admin || executor == proposal.creator,
@@ -579,11 +556,7 @@ impl GovernanceContract {
     /// # Panics
     /// Panics if proposal is not found
     pub fn get_proposal_votes(env: Env, proposal_id: u32) -> (i128, i128) {
-        let proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let proposal = get_proposal(&env, proposal_id);
 
         (proposal.votes_for, proposal.votes_against)
     }
@@ -710,11 +683,7 @@ impl GovernanceContract {
     /// # Returns
     /// Total quadratic cost spent
     pub fn get_proposal_quadratic_cost(env: Env, proposal_id: u32) -> i128 {
-        let proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let proposal = get_proposal(&env, proposal_id);
         
         proposal.total_quadratic_cost
     }
@@ -728,11 +697,7 @@ impl GovernanceContract {
     /// # Returns
     /// Number of unique voters
     pub fn get_voter_count(env: Env, proposal_id: u32) -> u32 {
-        let proposal: Proposal = env
-            .storage()
-            .instance()
-            .get(&DataKey::Proposal(proposal_id))
-            .expect("proposal not found");
+        let proposal = get_proposal(&env, proposal_id);
         
         proposal.voter_count
     }
