@@ -69,7 +69,8 @@ function simulateMigration() {
     }
 
     console.log('Applying migrations to shadow database...');
-    run(`${PRISMA_BINARY} migrate dev --name ci_simulation --skip-generate`, { env });
+    // Use migrate deploy instead of migrate dev to apply existing migrations without creating new ones
+    run(`${PRISMA_BINARY} migrate deploy --skip-generate`, { env });
     
     console.log('✅ Migration simulation successful.');
 }
