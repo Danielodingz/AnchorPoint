@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
+
 import { RedisService } from './redis.service';
+import { config } from '../config/env';
+import { traceAsync, traceSync, SpanKind } from '../utils/tracing';
 import configService from './config.service';
 import { traceAsync, traceSync, SpanKind } from '../utils/tracing';
 import configService from './config.service';
@@ -55,6 +58,7 @@ export interface MultiKeyVerifiedToken {
   transactionXdr?: string; // For hardware wallet support
 }
 
+const CHALLENGE_TTL_SECONDS = 300;
 const CHALLENGE_TTL_SECONDS = 300; // 5 minutes
 const JWT_SECRET = configService.getConfig().JWT_SECRET;
 
@@ -90,6 +94,7 @@ export const signToken = (publicKey: string): string => {
     'auth.sign_token',
     (span) => {
       span.setAttribute('auth.public_key', publicKey);
+      return jwt.sign({ sub: publicKey }, config.JWT_SECRET);
       // SEP-10 convention (and how our middleware uses it):
       // the user's public key is stored in the JWT `sub` claim.
       return jwt.sign({ sub: publicKey }, configService.getConfig().JWT_SECRET);
@@ -103,6 +108,7 @@ export const verifyToken = (token: string): VerifiedToken => {
     'auth.verify_token',
     (span) => {
       span.setAttribute('auth.token_length', token.length);
+      const decoded = jwt.verify(token, config.JWT_SECRET) as { sub?: string };
       const decoded = jwt.verify(token, configService.getConfig().JWT_SECRET) as { sub?: string };
       if (!decoded?.sub) throw new Error('Invalid token payload');
       span.setAttribute('auth.subject', decoded.sub);
@@ -184,6 +190,27 @@ export const storeChallenge = async (
   publicKey: string,
   challenge: string
 ): Promise<void> => {
+  return traceAsync(
+    'auth.store_challenge',
+    async (span) => {
+      span.setAttribute('auth.public_key', publicKey);
+      span.setAttribute('auth.challenge_length', challenge.length);
+
+      const challengeData: Challenge = {
+        challenge,
+        publicKey,
+        createdAt: Date.now(),
+      };
+
+      const key = `sep10:challenge:${publicKey}`;
+      await redisService.setJSON(key, challengeData, CHALLENGE_TTL_SECONDS);
+    },
+    SpanKind.CLIENT,
+    {
+      'auth.operation': 'store_challenge',
+      'auth.ttl_seconds': CHALLENGE_TTL_SECONDS,
+    }
+  );
   const challengeData: Challenge = {
     challenge,
     publicKey,
@@ -194,21 +221,36 @@ export const storeChallenge = async (
   await redisService.setJSON(key, challengeData, CHALLENGE_TTL_SECONDS);
 };
 
-/**
- * Retrieves and validates a challenge from Redis
- */
 export const getChallenge = async (
   redisService: RedisService,
   publicKey: string
 ): Promise<Challenge | null> => {
+  return traceAsync(
+    'auth.get_challenge',
+    async (span) => {
+      span.setAttribute('auth.public_key', publicKey);
+      const key = `sep10:challenge:${publicKey}`;
+      const result = await redisService.getJSON<Challenge>(key);
+
+      if (result) {
+        span.setAttribute('auth.challenge_found', true);
+        span.setAttribute('auth.challenge_age_ms', Date.now() - result.createdAt);
+      } else {
+        span.setAttribute('auth.challenge_found', false);
+      }
+
+      return result;
+    },
+    SpanKind.CLIENT,
+    {
+      'auth.operation': 'get_challenge',
+    }
+  );
   const key = `sep10:challenge:${publicKey}`;
   const result = await redisService.getJSON<Challenge>(key);
   return result;
 };
 
-/**
- * Removes a challenge from Redis after successful verification
- */
 export const removeChallenge = async (
   redisService: RedisService,
   publicKey: string
