@@ -1,4 +1,5 @@
 [workspace]
+members = ["yield", "nft_metadata", "liquid_staking", "xlm_wrapper", "registry"]
 members = ["yield", "nft_metadata", "liquid_staking", "swap"]
 resolver = "2"
 members = ["yield", "nft_metadata", "liquid_staking", "staking", "random_gen", "bridge_stub", "revenue_distributor"]
