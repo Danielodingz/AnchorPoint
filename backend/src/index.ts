@@ -17,6 +17,7 @@ import eventRouter from './api/routes/event.route';
 import notificationsRouter from './api/routes/notifications.route';
 import { errorHandler } from './api/middleware/error.middleware';
 import { metricsMiddleware, connectionTracker } from './api/middleware/metrics.middleware';
+import { publicLimiter } from './api/middleware/rate-limit.middleware';
 import { notificationService } from './services/notification.service';
 import { ConsoleEmailProvider, ConsoleSmsProvider, ConsolePushProvider } from './lib/notifications/providers';
 import { NotificationType } from '@prisma/client';
@@ -116,20 +117,12 @@ app.use('/api/reports', feeReportRouter);
 app.use('/api/events', eventRouter);
 app.use('/api/notifications', notificationsRouter);
 
-// Prometheus metrics endpoint
-app.use('/metrics', metricsRouter);
-
-// SEP-38 Price Quotes API
-app.use('/sep38', sep38Router);
-
-// SEP-1 Info endpoint
-app.use('/info', infoRouter);
-
-// SEP-24 routes
-app.use('/sep24', sep24Router);
-
-// SEP-6 routes
-app.use('/sep6', sep6Router);
+// Public endpoints with shared Redis-backed rate limit state
+app.use('/sep38', publicLimiter, sep38Router);
+app.use('/info', publicLimiter, infoRouter);
+app.use('/sep24', publicLimiter, sep24Router);
+app.use('/sep6', publicLimiter, sep6Router);
+app.use('/metrics', publicLimiter, metricsRouter);
 
 // Global error handling middleware (must be last)
 app.use(errorHandler);
