@@ -1,8 +1,9 @@
 import { RedisService } from './redis.service';
 import { getAsset, AssetConfig, FeeType } from '../config/assets';
 import logger from '../utils/logger';
+import { config } from '../config/env';
 
-const HORIZON_URL = process.env.HORIZON_URL || 'https://horizon.stellar.org';
+const HORIZON_URL = config.HORIZON_URL;
 const CACHE_KEY = 'fee_engine:stats';
 const CACHE_TTL_SECONDS = 30; // refresh every 30s
 
