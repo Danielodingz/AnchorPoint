@@ -19,6 +19,7 @@
     "lint:fix": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.500.0",
     "@prisma/client": "^6.19.2",
     "@stellar/stellar-sdk": "^14.6.1",
     "cron-parser": "^4.9.0",
