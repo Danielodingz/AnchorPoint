@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Bytes, BytesN, Env,
+    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, IntoVal,
 };
 
 /// Supported bridge operations.
@@ -29,7 +29,7 @@ pub struct BridgeMessage {
     /// Keccak-256 / SHA-256 hash of the originating tx on the source chain.
     pub message_hash: BytesN<32>,
     /// ECDSA / ed25519 signature over `message_hash` by the trusted relayer.
-    pub signature: Bytes,
+    pub signature: BytesN<64>,
 }
 
 /// Storage keys.
@@ -102,8 +102,11 @@ impl Bridge {
             .get(&DataKey::RelayerKey)
             .expect("not initialized");
 
-        env.crypto()
-            .ed25519_verify(&relayer_key, &msg.message_hash.clone().into(), &msg.signature);
+        env.crypto().ed25519_verify(
+            &relayer_key,
+            &msg.message_hash.clone().into(),
+            &msg.signature,
+        );
 
         // 2. Replay protection
         let processed_key = DataKey::Processed(msg.message_hash.clone());
@@ -117,7 +120,11 @@ impl Bridge {
         match msg.op {
             BridgeOp::Mint => {
                 // Inbound: tokens locked on source chain → mint wrapped tokens here.
-                token_client.mint(&msg.recipient, &msg.amount);
+                env.invoke_contract::<()>(
+                    &msg.token,
+                    &symbol_short!("mint"),
+                    soroban_sdk::vec![&env, msg.recipient.to_val(), msg.amount.into_val(&env)],
+                );
 
                 // Update destination minted tracking
                 let current_minted: i128 = env
@@ -145,7 +152,11 @@ impl Bridge {
                 Self::verify_collateralization(&env, msg.source_chain, msg.token.clone(), msg.amount);
 
                 // Outbound: burn wrapped tokens here → unlock on source chain.
-                token_client.burn(&msg.recipient, &msg.amount);
+                env.invoke_contract::<()>(
+                    &msg.token,
+                    &symbol_short!("burn"),
+                    soroban_sdk::vec![&env, msg.recipient.to_val(), msg.amount.into_val(&env)],
+                );
 
                 // Update destination minted tracking
                 let current_minted: i128 = env
