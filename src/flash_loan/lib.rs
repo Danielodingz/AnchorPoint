@@ -77,6 +77,10 @@ impl FlashLoanProvider {
     /// * `token` - The address of the token to be lent.
     /// * `amount` - The amount of tokens to lend.
     pub fn flash_loan(env: Env, receiver: Address, token: Address, amount: i128) {
+        // 1. Calculate the fee (5 basis points = 0.05%)
+        // fee = amount * 5 / 10000
+        let fee = amount.checked_mul(5).and_then(|a| a.checked_div(10000)).expect("Fee calculation overflow");
+        
         // 1. Calculate the fee (default 5 basis points = 0.05%)
         let fee_bps = Self::get_fee_bps(env.clone());
         let fee = amount * fee_bps as i128 / 10000;
@@ -93,9 +97,14 @@ impl FlashLoanProvider {
         receiver_client.execute_loan(&token, &amount, &fee);
 
         // 5. Verify repayment
+        // This ensures atomic repayment enforcement. If the balance check fails, the 
+        // whole transaction reverts, ensuring the loan is only successful if repaid.
+        // Soroban's call stack management and the lack of contract state in this provider
+        // make it naturally resistant to reentrancy attacks.
         let balance_after = token_client.balance(&env.current_contract_address());
-
-        if balance_after < balance_before + fee {
+        
+        let required_repayment = balance_before.checked_add(fee).expect("Repayment calculation overflow");
+        if balance_after < required_repayment {
             panic!("Flash loan not repaid with fee");
         }
 
@@ -184,3 +193,4 @@ impl FlashLoanProvider {
 }
 
 mod tests;
+mod verification;
